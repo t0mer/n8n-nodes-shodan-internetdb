@@ -1,21 +1,39 @@
 {
-    "name": "n8n-nodes-shodan-internetdb",
-    "version": "0.1.0",
-    "description": "",
-    "license": "MIT",
-    "homepage": "",
-    "keywords": [
-        "n8n-community-node-package"
-    ],
-    "author": {
-        "name": "Tomer Klein",
-        "email": "tomer.klein@gmail.com"
-    },
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/<...>/n8n-nodes-<...>.git"
-    },
-   "scripts": {
+	"name": "@t0mer/n8n-nodes-shodan-internetdb",
+	"version": "2026.9.0",
+	"description": "n8n nodes for Shodan InternetDB: keyless IP lookups for open ports, CPEs, hostnames, tags, and known CVEs, plus a trigger that alerts on exposure changes.",
+	"license": "MIT",
+	"homepage": "https://github.com/t0mer/n8n-nodes-shodan-internetdb#readme",
+	"bugs": {
+		"url": "https://github.com/t0mer/n8n-nodes-shodan-internetdb/issues"
+	},
+	"keywords": [
+		"n8n-community-node-package",
+		"n8n",
+		"shodan",
+		"internetdb",
+		"security",
+		"osint",
+		"attack-surface",
+		"cve",
+		"threat-intelligence"
+	],
+	"author": {
+		"name": "t0mer",
+		"email": "tomer.klein@gmail.com"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/t0mer/n8n-nodes-shodan-internetdb.git"
+	},
+	"engines": {
+		"node": ">=24"
+	},
+	"publishConfig": {
+		"access": "public",
+		"provenance": true
+	},
+	"scripts": {
 		"build": "n8n-node build",
 		"build:watch": "tsc --watch",
 		"dev": "n8n-node dev",
@@ -24,25 +42,25 @@
 		"release": "n8n-node release",
 		"prepublishOnly": "n8n-node prerelease"
 	},
-    "files": [
-        "dist"
-    ],
-    "n8n": {
-        "n8nNodesApiVersion": 1,
-        "strict": true,
-        "credentials": [],
-        "nodes": [
-            "dist/nodes/Example/Example.node.js"
-        ]
-    },
-    "devDependencies": {
-        "@n8n/node-cli": "*",
-        "eslint": "9.32.0",
-        "prettier": "3.6.2",
-        "release-it": "^19.0.4",
-        "typescript": "5.9.2"
-    },
-    "peerDependencies": {
-        "n8n-workflow": "*"
-    }
+	"files": [
+		"dist"
+	],
+	"n8n": {
+		"n8nNodesApiVersion": 1,
+		"strict": true,
+		"credentials": [],
+		"nodes": [
+			"dist/nodes/Example/Example.node.js"
+		]
+	},
+	"devDependencies": {
+		"@n8n/node-cli": "*",
+		"eslint": "9.32.0",
+		"prettier": "3.6.2",
+		"release-it": "^19.0.4",
+		"typescript": "5.9.2"
+	},
+	"peerDependencies": {
+		"n8n-workflow": "*"
+	}
 }
