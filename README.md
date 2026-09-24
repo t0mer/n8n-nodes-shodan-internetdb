@@ -189,7 +189,15 @@ npm run build
 npm pack && npm run scan:package -- ./t0mer-n8n-nodes-shodan-internetdb-*.tgz
 ```
 
-Releases use the `YYYY.M.PATCH` versioning scheme and are published from GitHub Actions with npm provenance (see `.github/workflows/publish.yml`). When bumping the version, also update `PACKAGE_VERSION` in `shared/constants.ts`. A test enforces that they match.
+### Releasing
+
+Versions are `YYYY.M.PATCH` and are assigned automatically:
+
+1. Open **Actions → Release → Run workflow** on GitHub. Leave **version** blank to auto-increment from the latest tag of the current month (`2026.9.0` → `2026.9.1` → …), or enter a version to override.
+2. The workflow sets the version, builds, tests, and publishes to npm with provenance (trusted publishing, no token).
+3. Only after a successful publish does it push the git tag and create a GitHub Release with generated notes.
+
+The git tag is the source of truth. The `version` in `package.json` on `main` is not bumped. The User-Agent version in `shared/version.ts` is generated from `package.json` by `npm run build`, so it never needs a manual edit.
 
 ## Disclaimer
 
