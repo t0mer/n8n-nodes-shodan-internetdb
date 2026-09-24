@@ -155,6 +155,10 @@ export function parseTarget(raw: string): ParsedTarget {
 	if (s.includes(':')) {
 		const groups = parseIPv6(s);
 		if (!groups) throw new InvalidTargetError(`"${s}" is not a valid IP address.`);
+		// IPv4-mapped (::ffff:a.b.c.d): InternetDB indexes the IPv4 form.
+		if (groups.slice(0, 5).every((g) => g === 0) && groups[5] === 0xffff) {
+			return { kind: 'ipv4', ip: intToIPv4(((groups[6] << 16) | groups[7]) >>> 0) };
+		}
 		return { kind: 'ipv6', ip: formatIPv6(groups) };
 	}
 
@@ -211,9 +215,6 @@ function isNonPublicIPv6(groups: number[]): boolean {
 	const [g0, g1] = groups;
 	const leadingZeros = groups.slice(0, 5).every((g) => g === 0);
 	if (leadingZeros && groups[5] === 0 && groups[6] === 0 && groups[7] <= 1) return true; // :: and ::1
-	if (leadingZeros && groups[5] === 0xffff) {
-		return isNonPublicIPv4(((groups[6] << 16) | groups[7]) >>> 0); // IPv4-mapped
-	}
 	return (
 		(g0 & 0xfe00) === 0xfc00 || // unique local
 		(g0 & 0xffc0) === 0xfe80 || // link-local

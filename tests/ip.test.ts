@@ -59,7 +59,11 @@ describe('parseTarget', () => {
 		});
 		expect(parseTarget('fe80::1')).toEqual({ kind: 'ipv6', ip: 'fe80::1' });
 		expect(parseTarget('abcd::1')).toEqual({ kind: 'ipv6', ip: 'abcd::1' });
-		expect(parseTarget('::ffff:1.2.3.4')).toEqual({ kind: 'ipv6', ip: '::ffff:102:304' });
+	});
+
+	it('converts IPv4-mapped IPv6 to IPv4', () => {
+		expect(parseTarget('::ffff:1.2.3.4')).toEqual({ kind: 'ipv4', ip: '1.2.3.4' });
+		expect(parseTarget('::ffff:808:808')).toEqual({ kind: 'ipv4', ip: '8.8.8.8' });
 	});
 
 	it('rejects IPv6 CIDR', () => {
@@ -219,6 +223,13 @@ describe('expandTargets', () => {
 		const res = expandTargets('8.8.8.8, 1.1.1.0/30, 8.8.8.8, 1.1.1.1, 10.0.0.1', 256);
 		expect(res.map((t) => t.ip)).toEqual(['8.8.8.8', '1.1.1.1', '1.1.1.2', '10.0.0.1']);
 		expect(res.find((t) => t.ip === '10.0.0.1')?.nonPublic).toBe(true);
+	});
+
+	it('de-duplicates IPv4-mapped IPv6 against the IPv4 form', () => {
+		expect(expandTargets('8.8.8.8, ::ffff:8.8.8.8', 10)).toEqual([
+			{ ip: '8.8.8.8', nonPublic: false },
+		]);
+		expect(expandTargets('::ffff:10.0.0.1', 10)).toEqual([{ ip: '10.0.0.1', nonPublic: true }]);
 	});
 
 	it('accepts IPv6 pass-through', () => {
