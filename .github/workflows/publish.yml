@@ -68,8 +68,10 @@ jobs:
           VERSION="${INPUT_VERSION:-$(./scripts/next-version.sh)}"
           # No leading zeros: npm would normalize 2026.9.01 to 2026.9.1 and the tag would diverge.
           [[ "$VERSION" =~ ^[0-9]{4}\.[1-9][0-9]?\.(0|[1-9][0-9]*)$ ]] || { echo "::error::invalid version '$VERSION' (expected YYYY.M.PATCH)"; exit 1; }
-          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
-            echo "::error::tag $VERSION already exists"; exit 1
+          # A tag on another commit means the version is taken. A tag on HEAD means a re-run
+          # after a partial failure, which the steps below resume safely.
+          if TAGGED="$(git rev-parse -q --verify "refs/tags/$VERSION^{commit}")" && [ "$TAGGED" != "$(git rev-parse HEAD)" ]; then
+            echo "::error::tag $VERSION already exists on another commit"; exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Releasing $VERSION"
@@ -86,7 +88,15 @@ jobs:
 
       - name: Publish
         # `n8n-node release` in CI runs lint and build, then `npm publish` with provenance.
-        run: npm run release
+        # Skipped when this version is already on npm (re-run after a later step failed).
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ "$(npm view "@t0mer/n8n-nodes-shodan-internetdb@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
+            echo "$VERSION is already published; skipping."
+          else
+            npm run release
+          fi
 
       # Tag only after a successful publish, so a failed run never burns a version.
       - name: Tag and create GitHub Release
@@ -97,6 +107,10 @@ jobs:
           set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag "$VERSION"
-          git push origin "$VERSION"
-          gh release create "$VERSION" --title "$VERSION" --generate-notes
+          if ! git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+            git tag "$VERSION"
+          fi
+          git push origin "refs/tags/$VERSION"
+          if ! gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release create "$VERSION" --title "$VERSION" --generate-notes
+          fi
