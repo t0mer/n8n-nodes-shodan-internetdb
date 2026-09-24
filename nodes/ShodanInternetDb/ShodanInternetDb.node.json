@@ -1,0 +1,12 @@
+{
+	"node": "@t0mer/n8n-nodes-shodan-internetdb.shodanInternetDb",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": ["Development", "Utility"],
+	"alias": ["Shodan", "IP", "CVE", "Open Ports", "OSINT", "Attack Surface", "Security"],
+	"resources": {
+		"primaryDocumentation": [
+			{ "url": "https://github.com/t0mer/n8n-nodes-shodan-internetdb#readme" }
+		]
+	}
+}
