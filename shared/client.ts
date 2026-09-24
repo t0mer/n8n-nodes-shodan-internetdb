@@ -19,8 +19,10 @@ export interface LookupContext {
 export interface LookupOptions {
 	timeoutMs: number;
 	maxRetries: number;
+	/** Cancels the in-flight request and any pending retry. */
+	abortSignal?: AbortSignal;
 	/** Injectable for tests. Defaults to n8n's `sleep`. */
-	sleep?: (ms: number) => Promise<void>;
+	sleep?: (ms: number, abortSignal?: AbortSignal) => Promise<void>;
 	/** Injectable for tests. Defaults to `Math.random`. */
 	random?: () => number;
 }
@@ -111,6 +113,9 @@ export async function lookup(
 	const node = ctx.getNode();
 
 	for (let attempt = 0; ; attempt++) {
+		if (opts.abortSignal?.aborted) {
+			throw new NodeOperationError(node, `InternetDB lookup of ${ip} was cancelled`);
+		}
 		let response: FullResponse | undefined;
 		let networkError: Error | undefined;
 		try {
@@ -122,6 +127,7 @@ export async function lookup(
 				returnFullResponse: true,
 				ignoreHttpStatusErrors: true,
 				timeout: opts.timeoutMs,
+				abortSignal: opts.abortSignal,
 			})) as FullResponse;
 		} catch (error) {
 			networkError = error as Error;
@@ -151,45 +157,46 @@ export async function lookup(
 			});
 		}
 
-		await wait(retryDelayMs(attempt, response?.headers, random));
+		await wait(retryDelayMs(attempt, response?.headers, random), opts.abortSignal);
 	}
 }
 
 /**
  * Runs `worker` over `items` with at most `concurrency` in flight, pausing `delayMs`
  * between consecutive requests of each worker. Results keep input order.
- * The first rejection stops workers from picking up new items and rejects the pool.
+ * The first rejection aborts the signal passed to every worker, stops workers from picking up
+ * new items, waits for in-flight work to wind down, then rejects the pool with that error.
  */
 export async function runPool<T, R>(
 	items: readonly T[],
 	concurrency: number,
 	delayMs: number,
-	worker: (item: T, index: number) => Promise<R>,
+	worker: (item: T, index: number, abortSignal: AbortSignal) => Promise<R>,
 	wait: (ms: number) => Promise<void> = sleep,
 ): Promise<R[]> {
 	const results = new Array<R>(items.length);
+	const controller = new AbortController();
 	let next = 0;
-	let stopped = false;
+	let failure: { error: unknown } | undefined;
 
 	const run = async () => {
-		for (let first = true; !stopped && next < items.length; first = false) {
+		for (let first = true; !controller.signal.aborted && next < items.length; first = false) {
 			if (!first && delayMs > 0) {
 				await wait(delayMs);
-				if (stopped || next >= items.length) return;
+				if (controller.signal.aborted || next >= items.length) return;
 			}
 			const index = next++;
-			results[index] = await worker(items[index], index);
+			try {
+				results[index] = await worker(items[index], index, controller.signal);
+			} catch (error) {
+				failure = failure ?? { error };
+				controller.abort();
+			}
 		}
 	};
 
 	const workerCount = Math.max(1, Math.min(concurrency, items.length));
-	await Promise.all(
-		Array.from({ length: workerCount }, () =>
-			run().catch(async (error) => {
-				stopped = true;
-				return await Promise.reject(error);
-			}),
-		),
-	);
+	await Promise.all(Array.from({ length: workerCount }, run));
+	if (failure) return await Promise.reject(failure.error);
 	return results;
 }

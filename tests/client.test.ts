@@ -92,7 +92,7 @@ describe('lookup', () => {
 		await expect(lookup(ctx, '51.83.59.99', opts(sleep))).resolves.toMatchObject({
 			status: 'found',
 		});
-		expect(sleep).toHaveBeenCalledWith(7000);
+		expect(sleep).toHaveBeenCalledWith(7000, undefined);
 	});
 
 	it('retries 429 without Retry-After using exponential backoff', async () => {
@@ -103,7 +103,7 @@ describe('lookup', () => {
 			{ statusCode: 200, body: host },
 		]);
 		await lookup(ctx, '51.83.59.99', opts(sleep));
-		expect(sleep.mock.calls).toEqual([[500], [1000]]);
+		expect(sleep.mock.calls.map((call) => call[0])).toEqual([500, 1000]);
 	});
 
 	it('retries 5xx then succeeds', async () => {
@@ -144,6 +144,31 @@ describe('lookup', () => {
 	it('rejects a malformed 200 body', async () => {
 		const { ctx } = makeCtx([{ statusCode: 200, body: '<html>' }]);
 		await expect(lookup(ctx, '1.1.1.1', opts())).rejects.toThrow(/unexpected response/);
+	});
+});
+
+describe('lookup cancellation', () => {
+	it('does not send a request once aborted', async () => {
+		const { ctx, httpRequest } = makeCtx([{ statusCode: 200, body: host }]);
+		const controller = new AbortController();
+		controller.abort();
+		await expect(
+			lookup(ctx, '1.1.1.1', { ...opts(), abortSignal: controller.signal }),
+		).rejects.toThrow('InternetDB lookup of 1.1.1.1 was cancelled');
+		expect(httpRequest).not.toHaveBeenCalled();
+	});
+
+	it('stops retrying when aborted during the backoff', async () => {
+		const controller = new AbortController();
+		const { ctx, httpRequest } = makeCtx([{ statusCode: 503 }, { statusCode: 503 }]);
+		const sleep = vi.fn(async () => controller.abort());
+		await expect(
+			lookup(ctx, '1.1.1.1', { ...opts(sleep), abortSignal: controller.signal }),
+		).rejects.toThrow(/cancelled/);
+		expect(httpRequest).toHaveBeenCalledTimes(1);
+		expect(httpRequest).toHaveBeenCalledWith(
+			expect.objectContaining({ abortSignal: controller.signal }),
+		);
 	});
 });
 
@@ -194,6 +219,21 @@ describe('runPool', () => {
 		});
 		await expect(pool).rejects.toThrow('boom');
 		expect(seen).toEqual([1, 2]);
+	});
+
+	it('aborts in-flight workers and waits for them before rejecting', async () => {
+		let slowSawAbort = false;
+		let slowFinished = false;
+		const pool = runPool(['fail', 'slow'], 2, 0, async (item, _index, signal) => {
+			if (item === 'fail') throw new Error('boom');
+			await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve()));
+			slowSawAbort = signal.aborted;
+			slowFinished = true;
+			return item;
+		});
+		await expect(pool).rejects.toThrow('boom');
+		expect(slowSawAbort).toBe(true);
+		expect(slowFinished).toBe(true);
 	});
 
 	it('handles an empty list', async () => {

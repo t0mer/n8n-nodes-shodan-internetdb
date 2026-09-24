@@ -71,6 +71,7 @@ async function lookupTarget(
 	ctx: IExecuteFunctions,
 	target: ResolvedTarget,
 	options: LookupNodeOptions,
+	abortSignal?: AbortSignal,
 ): Promise<IpOutcome> {
 	if (target.nonPublic) {
 		if (options.nonPublicBehavior === 'error') {
@@ -84,6 +85,7 @@ async function lookupTarget(
 	const result = await lookup(ctx, target.ip, {
 		timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
 		maxRetries: options.maxRetries ?? DEFAULT_MAX_RETRIES,
+		abortSignal,
 	});
 	const lookedUpAt = new Date().toISOString();
 	if (result.status === 'not_found' && options.noDataBehavior === 'error') {
@@ -224,8 +226,8 @@ async function lookupMany(
 		targets,
 		clamp(options.concurrency ?? DEFAULT_CONCURRENCY, 1, MAX_CONCURRENCY),
 		Math.max(0, options.delayMs ?? DEFAULT_DELAY_MS),
-		async (target) =>
-			await lookupTarget(ctx, target, options).then(
+		async (target, _index, abortSignal) =>
+			await lookupTarget(ctx, target, options, abortSignal).then(
 				(outcome) => ({ ip: target.ip, outcome }),
 				// With continue-on-fail, one failed IP must not abort the batch.
 				async (error: unknown) =>
