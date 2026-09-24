@@ -1,4 +1,4 @@
-import { NodeApiError } from 'n8n-workflow';
+import { NodeOperationError } from 'n8n-workflow';
 import type { IDataObject, IPollFunctions } from 'n8n-workflow';
 import { describe, expect, it } from 'vitest';
 import { ShodanInternetDbTrigger } from '../nodes/ShodanInternetDbTrigger/ShodanInternetDbTrigger.node';
@@ -159,7 +159,11 @@ describe('ShodanInternetDbTrigger', () => {
 			replies: { '51.83.59.99': { statusCode: 500 } },
 			staticData,
 		});
-		await expect(trigger.poll.call(ctx)).rejects.toBeInstanceOf(NodeApiError);
+		const error = await trigger.poll.call(ctx).catch((e: unknown) => e);
+		expect(error).toBeInstanceOf(NodeOperationError);
+		expect((error as Error).message).toMatch(
+			/^All 1 InternetDB lookups failed\. First error \(51\.83\.59\.99\): .*HTTP 500/,
+		);
 		expect(JSON.stringify(staticData)).toBe(snapshot);
 	});
 

@@ -1,5 +1,4 @@
 import {
-	NodeApiError,
 	NodeConnectionTypes,
 	NodeOperationError,
 	type IDataObject,
@@ -7,7 +6,6 @@ import {
 	type INodeType,
 	type INodeTypeDescription,
 	type IPollFunctions,
-	type JsonObject,
 } from 'n8n-workflow';
 import { lookup, runPool } from '../../shared/client';
 import {
@@ -98,12 +96,13 @@ function assertSomeLookupSucceeded(
 	lookups: Map<string, LookupResult | Error>,
 ): void {
 	if (!allLookupsFailed(ips, lookups)) return;
+	// A fresh error: re-wrapping a NodeApiError/NodeOperationError returns the original and drops the message.
 	const first = lookups.get(ips[0]) as Error;
-	if (first instanceof NodeApiError)
-		throw new NodeApiError(ctx.getNode(), first as unknown as JsonObject);
-	throw new NodeOperationError(ctx.getNode(), first, {
-		message: `All ${ips.length} InternetDB lookups failed: ${first.message}`,
-	});
+	throw new NodeOperationError(
+		ctx.getNode(),
+		`All ${ips.length} InternetDB lookups failed. First error (${ips[0]}): ${first.message}`,
+		{ description: 'Previous snapshots were kept. The next poll retries every target.' },
+	);
 }
 
 const toItems = (objects: IDataObject[]): INodeExecutionData[] => objects.map((json) => ({ json }));
