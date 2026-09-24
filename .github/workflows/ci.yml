@@ -11,6 +11,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -21,14 +24,80 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 'lts/*'
+          node-version: '24'
           cache: 'npm'
 
       - name: Install dependencies
-        run: 'npm ci'
+        run: npm ci
 
       - name: Run lint
-        run: 'npm run lint'
+        run: npm run lint
 
       - name: Run build
-        run: 'npm run build'
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+
+      - name: Check there are no runtime dependencies
+        run: |
+          deps="$(node -p "Object.keys(require('./package.json').dependencies || {}).length")"
+          [ "$deps" = "0" ] || { echo "::error::package.json must not have runtime dependencies"; exit 1; }
+
+      - name: Pack
+        run: npm pack --pack-destination "$RUNNER_TEMP"
+
+      - name: Scan package (n8n community package scanner)
+        run: npm run scan:package -- "$RUNNER_TEMP"/*.tgz
+
+  security:
+    runs-on: ubuntu-latest
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trivy filesystem scan (vulnerabilities, secrets, misconfig)
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Set up Node.js
+        if: ${{ env.SNYK_TOKEN != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Snyk dependency scan
+        if: ${{ env.SNYK_TOKEN != '' }}
+        run: |
+          npm ci
+          npx --yes snyk@1 test --severity-threshold=high
+
+  sonarqube:
+    runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+
+    steps:
+      - uses: actions/checkout@v4
+        if: ${{ env.SONAR_TOKEN != '' }}
+        with:
+          fetch-depth: 0
+
+      - name: SonarQube scan
+        if: ${{ env.SONAR_TOKEN != '' }}
+        uses: SonarSource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4 # v8
+        with:
+          args: >
+            -Dsonar.projectKey=t0mer_n8n-nodes-shodan-internetdb
+            -Dsonar.sources=nodes,shared
+            -Dsonar.tests=tests
