@@ -50,7 +50,8 @@
 		"strict": true,
 		"credentials": [],
 		"nodes": [
-			"dist/nodes/Example/Example.node.js"
+			"dist/nodes/ShodanInternetDb/ShodanInternetDb.node.js",
+			"dist/nodes/ShodanInternetDbTrigger/ShodanInternetDbTrigger.node.js"
 		]
 	},
 	"devDependencies": {
