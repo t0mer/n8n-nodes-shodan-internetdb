@@ -186,18 +186,26 @@ npm run dev        # n8n with the nodes loaded, at http://localhost:5678
 npm run lint
 npm test           # vitest, no network access
 npm run build
-npm pack && npm run scan:package -- ./t0mer-n8n-nodes-shodan-internetdb-*.tgz
+npm pack && npm install --no-save @n8n/scan-community-package@0.37.0 \
+  && npm run scan:package -- ./t0mer-n8n-nodes-shodan-internetdb-*.tgz
 ```
 
 ### Releasing
 
-Versions are `YYYY.M.PATCH` and are assigned automatically:
+Versions are `YYYY.M.PATCH`, and the pushed git tag sets the published version:
 
-1. Open **Actions → Release → Run workflow** on GitHub. Leave **version** blank to auto-increment from the latest tag of the current month (`2026.9.0` → `2026.9.1` → …), or enter a version to override.
-2. The workflow sets the version, builds, tests, and publishes to npm with provenance (trusted publishing, no token).
-3. Only after a successful publish does it push the git tag and create a GitHub Release with generated notes.
+```bash
+VERSION="$(./scripts/next-version.sh)"   # next patch for the current month, e.g. 2026.9.1
+git tag "$VERSION" && git push origin "$VERSION"
+```
 
-The git tag is the source of truth. The `version` in `package.json` on `main` is not bumped. The User-Agent version in `shared/version.ts` is generated from `package.json` by `npm run build`, so it never needs a manual edit.
+Pushing the tag runs the Publish workflow (`.github/workflows/publish.yml`):
+
+1. The workflow writes the tag's version into `package.json`.
+2. `npm run release` lints, builds, and publishes to npm with provenance, using trusted publishing (OIDC) or the optional `NPM_TOKEN` secret.
+3. A separate job runs the n8n Creator Portal scan on the published package.
+
+The `version` in `package.json` on `main` is not bumped. The User-Agent version in `shared/version.ts` is generated from `package.json` by `npm run build`, so it never needs a manual edit.
 
 ## Disclaimer
 

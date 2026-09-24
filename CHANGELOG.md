@@ -1,7 +1,7 @@
 # Changelog
 
-Release notes for every version are generated automatically on
-[GitHub Releases](https://github.com/t0mer/n8n-nodes-shodan-internetdb/releases).
+Each release is a `YYYY.M.PATCH` git tag; see the
+[tags](https://github.com/t0mer/n8n-nodes-shodan-internetdb/tags) for what changed between versions.
 
 ## 2026.9.0
 
