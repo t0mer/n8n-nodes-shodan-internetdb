@@ -9,9 +9,17 @@ import {
 	type INodeType,
 	type INodeTypeDescription,
 } from 'n8n-workflow';
-import { lookup } from '../../shared/client';
-import { DEFAULT_MAX_RETRIES, DEFAULT_TIMEOUT_MS } from '../../shared/constants';
-import { parseSingleIp, type ResolvedTarget } from '../../shared/ip';
+import { lookup, runPool } from '../../shared/client';
+import {
+	ACTION_MAX_ADDRESSES_LIMIT,
+	DEFAULT_CONCURRENCY,
+	DEFAULT_DELAY_MS,
+	DEFAULT_MAX_ADDRESSES,
+	DEFAULT_MAX_RETRIES,
+	DEFAULT_TIMEOUT_MS,
+	MAX_CONCURRENCY,
+} from '../../shared/constants';
+import { expandTargets, parseSingleIp, type ResolvedTarget } from '../../shared/ip';
 import { shapeOutcome, toExecutionData, type IpOutcome } from '../../shared/output';
 import type { NoDataBehavior, NonPublicBehavior, OutputMode } from '../../shared/types';
 import { ipFields, ipOperations } from './descriptions/IpDescription';
@@ -23,6 +31,18 @@ interface LookupNodeOptions {
 	noDataBehavior?: NoDataBehavior;
 	nonPublicBehavior?: NonPublicBehavior;
 	timeoutMs?: number;
+}
+
+interface LookupManyNodeOptions extends LookupNodeOptions {
+	concurrency?: number;
+	delayMs?: number;
+	maxAddresses?: number;
+}
+
+type IpResult = { ip: string; outcome: IpOutcome } | { ip: string; error: unknown };
+
+function clamp(value: number, min: number, max: number): number {
+	return Math.min(max, Math.max(min, Math.floor(value)));
 }
 
 /** Attaches the item index to an error, keeping NodeApiError / NodeOperationError instances intact. */
@@ -117,26 +137,103 @@ export class ShodanInternetDb implements INodeType {
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
-		const items = this.getInputData();
-		const returnData: INodeExecutionData[] = [];
-
-		for (let i = 0; i < items.length; i++) {
-			const rawIp = String(this.getNodeParameter('ip', i, ''));
-			try {
-				const outputMode = this.getNodeParameter('outputMode', i, 'host') as OutputMode;
-				const options = this.getNodeParameter('options', i, {}) as LookupNodeOptions;
-
-				const outcome = await lookupTarget(this, parseSingleIp(rawIp), options);
-				returnData.push(...toExecutionData(shape(outcome, outputMode, options), i));
-			} catch (error) {
-				if (this.continueOnFail()) {
-					returnData.push({ json: errorJson(rawIp.trim(), error), pairedItem: { item: i } });
-					continue;
-				}
-				throw asNodeError(this.getNode(), error, i);
-			}
-		}
-
-		return [returnData];
+		const operation = this.getNodeParameter('operation', 0) as string;
+		if (operation === 'lookupMany') return [await executeLookupMany(this)];
+		return [await executeLookup(this)];
 	}
+}
+
+async function executeLookup(ctx: IExecuteFunctions): Promise<INodeExecutionData[]> {
+	const items = ctx.getInputData();
+	const returnData: INodeExecutionData[] = [];
+
+	for (let i = 0; i < items.length; i++) {
+		const rawIp = String(ctx.getNodeParameter('ip', i, ''));
+		try {
+			const outputMode = ctx.getNodeParameter('outputMode', i, 'host') as OutputMode;
+			const options = ctx.getNodeParameter('options', i, {}) as LookupNodeOptions;
+
+			const outcome = await lookupTarget(ctx, parseSingleIp(rawIp), options);
+			returnData.push(...toExecutionData(shape(outcome, outputMode, options), i));
+		} catch (error) {
+			if (ctx.continueOnFail()) {
+				returnData.push({ json: errorJson(rawIp.trim(), error), pairedItem: { item: i } });
+				continue;
+			}
+			throw asNodeError(ctx.getNode(), error, i);
+		}
+	}
+
+	return returnData;
+}
+
+async function executeLookupMany(ctx: IExecuteFunctions): Promise<INodeExecutionData[]> {
+	const runOnce = ctx.getNodeParameter('runOnce', 0, true) as boolean;
+	const itemCount = runOnce ? 1 : ctx.getInputData().length;
+	const returnData: INodeExecutionData[] = [];
+
+	for (let i = 0; i < itemCount; i++) {
+		const rawTargets = String(ctx.getNodeParameter('targets', i, ''));
+		try {
+			returnData.push(...(await lookupMany(ctx, rawTargets, i)));
+		} catch (error) {
+			if (ctx.continueOnFail()) {
+				returnData.push({
+					json: { targets: rawTargets, error: (error as Error).message },
+					pairedItem: { item: i },
+				});
+				continue;
+			}
+			throw asNodeError(ctx.getNode(), error, i);
+		}
+	}
+
+	return returnData;
+}
+
+/** Looks up every address `rawTargets` expands to. Output is in input order and paired to `itemIndex`. */
+async function lookupMany(
+	ctx: IExecuteFunctions,
+	rawTargets: string,
+	itemIndex: number,
+): Promise<INodeExecutionData[]> {
+	const outputMode = ctx.getNodeParameter('outputMode', itemIndex, 'host') as OutputMode;
+	const options = ctx.getNodeParameter('options', itemIndex, {}) as LookupManyNodeOptions;
+	const continueOnFail = ctx.continueOnFail();
+
+	const maxAddresses = clamp(
+		options.maxAddresses ?? DEFAULT_MAX_ADDRESSES,
+		1,
+		ACTION_MAX_ADDRESSES_LIMIT,
+	);
+	const targets = expandTargets(rawTargets, maxAddresses);
+
+	// Fail before sending any request rather than part-way through the batch.
+	const firstNonPublic = targets.find((t) => t.nonPublic);
+	if (firstNonPublic && options.nonPublicBehavior === 'error' && !continueOnFail) {
+		throw new NodeOperationError(
+			ctx.getNode(),
+			`${firstNonPublic.ip} (address ${targets.indexOf(firstNonPublic) + 1} of ${targets.length}) is a non-public address and never has InternetDB data`,
+			{ itemIndex },
+		);
+	}
+
+	const results = await runPool<ResolvedTarget, IpResult>(
+		targets,
+		clamp(options.concurrency ?? DEFAULT_CONCURRENCY, 1, MAX_CONCURRENCY),
+		Math.max(0, options.delayMs ?? DEFAULT_DELAY_MS),
+		async (target) =>
+			await lookupTarget(ctx, target, options).then(
+				(outcome) => ({ ip: target.ip, outcome }),
+				// With continue-on-fail, one failed IP must not abort the batch.
+				async (error: unknown) =>
+					continueOnFail ? { ip: target.ip, error } : await Promise.reject(error),
+			),
+	);
+
+	return results.flatMap((result) =>
+		'error' in result
+			? [{ json: errorJson(result.ip, result.error), pairedItem: { item: itemIndex } }]
+			: toExecutionData(shape(result.outcome, outputMode, options), itemIndex),
+	);
 }

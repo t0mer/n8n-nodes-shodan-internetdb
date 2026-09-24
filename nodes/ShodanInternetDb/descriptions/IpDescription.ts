@@ -1,5 +1,13 @@
 import type { INodeProperties } from 'n8n-workflow';
-import { DEFAULT_MAX_RETRIES, DEFAULT_TIMEOUT_MS } from '../../../shared/constants';
+import {
+	ACTION_MAX_ADDRESSES_LIMIT,
+	DEFAULT_CONCURRENCY,
+	DEFAULT_DELAY_MS,
+	DEFAULT_MAX_ADDRESSES,
+	DEFAULT_MAX_RETRIES,
+	DEFAULT_TIMEOUT_MS,
+	MAX_CONCURRENCY,
+} from '../../../shared/constants';
 
 export const ipOperations: INodeProperties[] = [
 	{
@@ -15,6 +23,13 @@ export const ipOperations: INodeProperties[] = [
 				description:
 					'Get open ports, CPEs, hostnames, tags, and known CVEs for a single public IP address',
 				action: 'Look up an IP address',
+			},
+			{
+				name: 'Lookup Many',
+				value: 'lookupMany',
+				description:
+					'Look up a list of IP addresses and CIDR ranges in one run, for example "1.1.1.1, 8.8.8.0/30"',
+				action: 'Look up many IP addresses or ranges',
 			},
 		],
 		default: 'lookup',
@@ -132,6 +147,36 @@ export const commonOptions: INodeProperties[] = [
 	},
 ];
 
+/** Options for Lookup Many: the common options plus batch controls, sorted by display name. */
+const lookupManyOptions: INodeProperties[] = [
+	{
+		displayName: 'Concurrency',
+		name: 'concurrency',
+		type: 'number',
+		typeOptions: { minValue: 1, maxValue: MAX_CONCURRENCY },
+		default: DEFAULT_CONCURRENCY,
+		description: `How many lookups to run in parallel (max ${MAX_CONCURRENCY}). Keep it low: InternetDB rate limits are not documented.`,
+	},
+	{
+		displayName: 'Delay Between Requests (Ms)',
+		name: 'delayMs',
+		type: 'number',
+		typeOptions: { minValue: 0 },
+		default: DEFAULT_DELAY_MS,
+		description: 'Pause in milliseconds between consecutive requests of each parallel worker',
+	},
+	...commonOptions.slice(0, 2),
+	{
+		displayName: 'Max Addresses',
+		name: 'maxAddresses',
+		type: 'number',
+		typeOptions: { minValue: 1, maxValue: ACTION_MAX_ADDRESSES_LIMIT },
+		default: DEFAULT_MAX_ADDRESSES,
+		description: `Maximum number of unique addresses the targets may expand to (hard max ${ACTION_MAX_ADDRESSES_LIMIT}). Larger inputs fail before any request is sent.`,
+	},
+	...commonOptions.slice(2),
+];
+
 export const ipFields: INodeProperties[] = [
 	{
 		displayName: 'IP Address',
@@ -156,5 +201,39 @@ export const ipFields: INodeProperties[] = [
 		default: {},
 		displayOptions: { show: { resource: ['ip'], operation: ['lookup'] } },
 		options: commonOptions,
+	},
+	{
+		displayName: 'Targets',
+		name: 'targets',
+		type: 'string',
+		typeOptions: { rows: 3 },
+		required: true,
+		default: '',
+		placeholder: '1.1.1.1, 8.8.8.0/30',
+		displayOptions: { show: { resource: ['ip'], operation: ['lookupMany'] } },
+		description:
+			'IPv4 addresses, IPv4 CIDR ranges, and single IPv6 addresses separated by commas, spaces, or new lines. Duplicates are removed. To pass an array from a previous node, use an expression that joins it with commas.',
+	},
+	{
+		displayName: 'Run Once',
+		name: 'runOnce',
+		type: 'boolean',
+		default: true,
+		displayOptions: { show: { resource: ['ip'], operation: ['lookupMany'] } },
+		description:
+			'Whether to read Targets from the first input item only and run once. Turn off to run a separate batch for every input item.',
+	},
+	{
+		...outputModeField,
+		displayOptions: { show: { resource: ['ip'], operation: ['lookupMany'] } },
+	},
+	{
+		displayName: 'Options',
+		name: 'options',
+		type: 'collection',
+		placeholder: 'Add Option',
+		default: {},
+		displayOptions: { show: { resource: ['ip'], operation: ['lookupMany'] } },
+		options: lookupManyOptions,
 	},
 ];

@@ -134,3 +134,142 @@ describe('Lookup', () => {
 		});
 	});
 });
+
+function manyParams(targets: string[], extra: Record<string, unknown> = {}) {
+	return (name: string, i: number) => {
+		if (name === 'operation') return 'lookupMany';
+		if (name === 'targets') return targets[i];
+		if (name === 'options') return { delayMs: 0, ...(extra.options as object) };
+		return extra[name];
+	};
+}
+
+describe('Lookup Many', () => {
+	it('expands ranges, de-duplicates, keeps input order, and pairs to item 0 with runOnce', async () => {
+		const httpRequest = httpByIp({ '51.83.59.99': { statusCode: 200, body: host } });
+		const ctx = executeContext({
+			items: 3,
+			params: manyParams(['51.83.59.99, 8.8.8.0/30, 51.83.59.99']),
+			httpRequest,
+		});
+		const [out] = await node.execute.call(ctx);
+		expect(out.map((item) => item.json.ip)).toEqual(['51.83.59.99', '8.8.8.1', '8.8.8.2']);
+		expect(out.every((item) => (item.pairedItem as { item: number }).item === 0)).toBe(true);
+		expect(httpRequest).toHaveBeenCalledTimes(3);
+	});
+
+	it('runs per input item when runOnce is off', async () => {
+		const ctx = executeContext({
+			items: 2,
+			params: manyParams(['1.1.1.1', '8.8.8.8, 9.9.9.9'], { runOnce: false }),
+			httpRequest: httpByIp({}),
+		});
+		const [out] = await node.execute.call(ctx);
+		expect(out.map((item) => [item.json.ip, item.pairedItem])).toEqual([
+			['1.1.1.1', { item: 0 }],
+			['8.8.8.8', { item: 1 }],
+			['9.9.9.9', { item: 1 }],
+		]);
+	});
+
+	it('handles a /24 within limits', async () => {
+		const httpRequest = httpByIp({});
+		const ctx = executeContext({
+			params: manyParams(['8.8.8.0/24'], { options: { concurrency: 5, noDataBehavior: 'skip' } }),
+			httpRequest,
+		});
+		const [out] = await node.execute.call(ctx);
+		expect(out).toEqual([]);
+		expect(httpRequest).toHaveBeenCalledTimes(254);
+	});
+
+	it('refuses a /16 before sending any request', async () => {
+		const httpRequest = httpByIp({});
+		const ctx = executeContext({ params: manyParams(['8.8.0.0/16']), httpRequest });
+		await expect(node.execute.call(ctx)).rejects.toThrow(/expand to 65534 addresses/);
+		expect(httpRequest).not.toHaveBeenCalled();
+	});
+
+	it('caps maxAddresses at the hard limit of 4096', async () => {
+		const ctx = executeContext({
+			params: manyParams(['8.0.0.0/19'], { options: { maxAddresses: 100000 } }),
+			httpRequest: httpByIp({}),
+		});
+		await expect(node.execute.call(ctx)).rejects.toThrow(/Max Addresses limit of 4096/);
+	});
+
+	it('names the offending target and its position', async () => {
+		const ctx = executeContext({
+			params: manyParams(['1.1.1.1, 2.2.2.2:80']),
+			httpRequest: httpByIp({}),
+		});
+		await expect(node.execute.call(ctx)).rejects.toThrow(
+			/^Target 2 \("2.2.2.2:80"\): .*includes a port/,
+		);
+	});
+
+	it('fails on a non-public address before any request with nonPublicBehavior=error', async () => {
+		const httpRequest = httpByIp({});
+		const ctx = executeContext({
+			params: manyParams(['1.1.1.1, 10.0.0.1'], { options: { nonPublicBehavior: 'error' } }),
+			httpRequest,
+		});
+		await expect(node.execute.call(ctx)).rejects.toThrow(/10.0.0.1 \(address 2 of 2\)/);
+		expect(httpRequest).not.toHaveBeenCalled();
+	});
+
+	it('skips non-public addresses in ports mode', async () => {
+		const httpRequest = httpByIp({ '51.83.59.99': { statusCode: 200, body: host } });
+		const ctx = executeContext({
+			params: manyParams(['10.0.0.1, 51.83.59.99'], { outputMode: 'ports' }),
+			httpRequest,
+		});
+		const [out] = await node.execute.call(ctx);
+		expect(out.map((item) => item.json.port)).toEqual([22, 80, 443, 500]);
+		expect(httpRequest).toHaveBeenCalledTimes(1);
+	});
+
+	it('does not abort the batch for one failed IP with continueOnFail', async () => {
+		const ctx = executeContext({
+			params: manyParams(['1.1.1.1, 51.83.59.99, 10.0.0.1'], {
+				options: { maxRetries: 0, nonPublicBehavior: 'error' },
+			}),
+			httpRequest: httpByIp({
+				'1.1.1.1': { statusCode: 500 },
+				'51.83.59.99': { statusCode: 200, body: host },
+			}),
+			continueOnFail: true,
+		});
+		const [out] = await node.execute.call(ctx);
+		expect(out.map((item) => item.json)).toEqual([
+			expect.objectContaining({ ip: '1.1.1.1', statusCode: 500 }),
+			expect.objectContaining({ ip: '51.83.59.99', found: true }),
+			expect.objectContaining({ ip: '10.0.0.1', error: expect.stringMatching(/non-public/) }),
+		]);
+	});
+
+	it('aborts the batch on the first failure without continueOnFail', async () => {
+		const httpRequest = httpByIp({ '1.1.1.1': { statusCode: 500 } });
+		const ctx = executeContext({
+			params: manyParams(['1.1.1.1, 8.8.8.8, 9.9.9.9'], { options: { maxRetries: 0 } }),
+			httpRequest,
+		});
+		await expect(node.execute.call(ctx)).rejects.toBeInstanceOf(NodeApiError);
+		expect(httpRequest).toHaveBeenCalledTimes(1);
+	});
+
+	it('emits a batch error item for invalid targets with continueOnFail', async () => {
+		const ctx = executeContext({
+			params: manyParams(['example.com']),
+			httpRequest: httpByIp({}),
+			continueOnFail: true,
+		});
+		const [out] = await node.execute.call(ctx);
+		expect(out).toEqual([
+			{
+				json: { targets: 'example.com', error: expect.stringMatching(/only accepts IP addresses/) },
+				pairedItem: { item: 0 },
+			},
+		]);
+	});
+});
