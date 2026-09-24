@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Runs the @n8n/scan-community-package checks against a local `npm pack` tarball.
 // The published CLI only scans packages already on the npm registry.
-// Usage: node scripts/scan-package.mjs <package.tgz>
+// Usage: npm install --no-save @n8n/scan-community-package@0.37.0
+//        node scripts/scan-package.mjs <package.tgz>
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';

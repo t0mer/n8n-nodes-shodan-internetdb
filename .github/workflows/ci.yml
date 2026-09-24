@@ -48,7 +48,9 @@ jobs:
         run: npm pack --pack-destination "$RUNNER_TEMP"
 
       - name: Scan package (n8n community package scanner)
-        run: npm run scan:package -- "$RUNNER_TEMP"/*.tgz
+        run: |
+          npm install --no-save @n8n/scan-community-package@0.37.0
+          npm run scan:package -- "$RUNNER_TEMP"/*.tgz
 
   security:
     runs-on: ubuntu-latest

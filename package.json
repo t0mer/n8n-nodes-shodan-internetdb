@@ -1,72 +1,75 @@
 {
-	"name": "@t0mer/n8n-nodes-shodan-internetdb",
-	"version": "2026.9.0",
-	"description": "n8n nodes for Shodan InternetDB: keyless IP lookups for open ports, CPEs, hostnames, tags, and known CVEs, plus a trigger that alerts on exposure changes.",
-	"license": "MIT",
-	"homepage": "https://github.com/t0mer/n8n-nodes-shodan-internetdb#readme",
-	"bugs": {
-		"url": "https://github.com/t0mer/n8n-nodes-shodan-internetdb/issues"
-	},
-	"keywords": [
-		"n8n-community-node-package",
-		"n8n",
-		"shodan",
-		"internetdb",
-		"security",
-		"osint",
-		"attack-surface",
-		"cve",
-		"threat-intelligence"
-	],
-	"author": {
-		"name": "t0mer",
-		"email": "tomer.klein@gmail.com"
-	},
-	"repository": {
-		"type": "git",
-		"url": "https://github.com/t0mer/n8n-nodes-shodan-internetdb.git"
-	},
-	"engines": {
-		"node": ">=24"
-	},
-	"publishConfig": {
-		"access": "public",
-		"provenance": true
-	},
-	"scripts": {
-		"build": "node scripts/sync-version.mjs && n8n-node build",
-		"build:watch": "tsc --watch",
-		"dev": "n8n-node dev",
-		"lint": "n8n-node lint",
-		"lint:fix": "n8n-node lint --fix",
-		"release": "n8n-node release",
-		"prepublishOnly": "n8n-node prerelease",
-		"test": "vitest run",
-		"scan:package": "node scripts/scan-package.mjs"
-	},
-	"files": [
-		"dist",
-		"!dist/tsconfig.tsbuildinfo"
-	],
-	"n8n": {
-		"n8nNodesApiVersion": 1,
-		"strict": true,
-		"credentials": [],
-		"nodes": [
-			"dist/nodes/ShodanInternetDb/ShodanInternetDb.node.js",
-			"dist/nodes/ShodanInternetDbTrigger/ShodanInternetDbTrigger.node.js"
-		]
-	},
-	"devDependencies": {
-		"@n8n/node-cli": "*",
-		"@n8n/scan-community-package": "0.37.0",
-		"eslint": "9.32.0",
-		"prettier": "3.6.2",
-		"release-it": "^19.0.4",
-		"typescript": "5.9.2",
-		"vitest": "^3.2.7"
-	},
-	"peerDependencies": {
-		"n8n-workflow": "*"
-	}
+  "name": "@t0mer/n8n-nodes-shodan-internetdb",
+  "version": "2026.9.0",
+  "description": "n8n nodes for Shodan InternetDB: keyless IP lookups for open ports, CPEs, hostnames, tags, and known CVEs, plus a trigger that alerts on exposure changes.",
+  "license": "MIT",
+  "homepage": "https://github.com/t0mer/n8n-nodes-shodan-internetdb#readme",
+  "bugs": {
+    "url": "https://github.com/t0mer/n8n-nodes-shodan-internetdb/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "keywords": [
+    "n8n-community-node-package",
+    "n8n",
+    "shodan",
+    "internetdb",
+    "security",
+    "osint",
+    "attack-surface",
+    "cve",
+    "threat-intelligence"
+  ],
+  "author": {
+    "name": "t0mer",
+    "email": "tomer.klein@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/t0mer/n8n-nodes-shodan-internetdb.git"
+  },
+  "scripts": {
+    "build": "node scripts/sync-version.mjs && n8n-node build",
+    "build:watch": "tsc --watch",
+    "dev": "n8n-node dev",
+    "lint": "n8n-node lint",
+    "lint:fix": "n8n-node lint --fix",
+    "release": "n8n-node release",
+    "prepublishOnly": "n8n-node prerelease",
+    "test": "vitest run",
+    "scan:package": "node scripts/scan-package.mjs"
+  },
+  "files": [
+    "dist",
+    "!dist/tsconfig.tsbuildinfo"
+  ],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "strict": true,
+    "credentials": [],
+    "nodes": [
+      "dist/nodes/ShodanInternetDb/ShodanInternetDb.node.js",
+      "dist/nodes/ShodanInternetDbTrigger/ShodanInternetDbTrigger.node.js"
+    ]
+  },
+  "devDependencies": {
+    "@n8n/node-cli": "*",
+    "eslint": "9.32.0",
+    "prettier": "3.6.2",
+    "release-it": "^19.0.4",
+    "typescript": "5.9.2",
+    "vitest": "^3.2.7"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  },
+  "allowScripts": {
+    "isolated-vm@7.0.1": true,
+    "cpu-features@0.0.10": true,
+    "ssh2@1.15.0": true,
+    "unrs-resolver@1.12.2": true,
+    "eslint-plugin-n8n-nodes-base": false
+  }
 }
