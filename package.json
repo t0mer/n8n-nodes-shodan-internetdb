@@ -45,7 +45,8 @@
 		"scan:package": "node scripts/scan-package.mjs"
 	},
 	"files": [
-		"dist"
+		"dist",
+		"!dist/tsconfig.tsbuildinfo"
 	],
 	"n8n": {
 		"n8nNodesApiVersion": 1,
