@@ -1,0 +1,201 @@
+{
+	"name": "Shodan InternetDB: enrich SIEM alert source IPs",
+	"nodes": [
+		{
+			"parameters": {
+				"httpMethod": "POST",
+				"path": "siem-alert",
+				"responseMode": "responseNode",
+				"options": {}
+			},
+			"id": "f8c98f12-189f-4cc4-80d1-0d0474e4b433",
+			"name": "SIEM Alert Webhook",
+			"type": "n8n-nodes-base.webhook",
+			"typeVersion": 2,
+			"position": [0, 0],
+			"webhookId": "be3966f3-bdbe-4350-9ee2-03bcfd8ade11"
+		},
+		{
+			"parameters": {
+				"resource": "ip",
+				"operation": "lookup",
+				"ip": "={{ $json.body.source_ip }}",
+				"outputMode": "host",
+				"options": {
+					"noDataBehavior": "returnEmpty",
+					"includePortNames": true
+				}
+			},
+			"id": "78d01b0c-abfb-4b4a-96cc-804c4ab6b94f",
+			"name": "Look Up Source IP",
+			"type": "@t0mer/n8n-nodes-shodan-internetdb.shodanInternetDb",
+			"typeVersion": 1,
+			"position": [220, 0],
+			"onError": "continueRegularOutput"
+		},
+		{
+			"parameters": {
+				"conditions": {
+					"options": {
+						"caseSensitive": true,
+						"leftValue": "",
+						"typeValidation": "loose",
+						"version": 2
+					},
+					"conditions": [
+						{
+							"id": "f68911a4-5651-4b06-ae53-d88a86533d00",
+							"leftValue": "={{ $json.hasVulns }}",
+							"rightValue": "",
+							"operator": {
+								"type": "boolean",
+								"operation": "true",
+								"singleValue": true
+							}
+						}
+					],
+					"combinator": "and"
+				},
+				"options": {}
+			},
+			"id": "83f53877-4bcc-4601-bb9c-4f6a203b7ebf",
+			"name": "Has Known CVEs?",
+			"type": "n8n-nodes-base.if",
+			"typeVersion": 2.2,
+			"position": [440, 0]
+		},
+		{
+			"parameters": {
+				"assignments": {
+					"assignments": [
+						{
+							"id": "6b4d49c3-c237-42cd-ac2e-dd638fde9a41",
+							"name": "priority",
+							"value": "high",
+							"type": "string"
+						},
+						{
+							"id": "f9d324fe-44b7-4c19-acd4-d277faeeba05",
+							"name": "triage",
+							"value": "={{ `Source ${$json.ip} exposes ${$json.vulnCount} known CVE(s) on ports ${($json.ports || []).join(', ')}` }}",
+							"type": "string"
+						}
+					]
+				},
+				"includeOtherFields": true,
+				"options": {}
+			},
+			"id": "e7de0263-8bbb-4d65-8c15-c28e057439c5",
+			"name": "Mark High Priority",
+			"type": "n8n-nodes-base.set",
+			"typeVersion": 3.4,
+			"position": [680, -100]
+		},
+		{
+			"parameters": {
+				"assignments": {
+					"assignments": [
+						{
+							"id": "54109bb3-a9b1-4ada-b0b2-be8a2086fa83",
+							"name": "priority",
+							"value": "normal",
+							"type": "string"
+						},
+						{
+							"id": "05d01c2e-90d9-466b-b174-ada967e8fc02",
+							"name": "triage",
+							"value": "={{ $json.error ? `Enrichment failed: ${$json.error}` : ($json.found ? `Source ${$json.ip} has no known CVEs` : `No InternetDB data for ${$json.ip}`) }}",
+							"type": "string"
+						}
+					]
+				},
+				"includeOtherFields": true,
+				"options": {}
+			},
+			"id": "8e4866f3-5c9a-401e-b03a-530c8a502f45",
+			"name": "Mark Normal Priority",
+			"type": "n8n-nodes-base.set",
+			"typeVersion": 3.4,
+			"position": [680, 100]
+		},
+		{
+			"parameters": {
+				"respondWith": "firstIncomingItem",
+				"options": {}
+			},
+			"id": "47f9146e-8f68-4ba9-8235-d6186d356ce6",
+			"name": "Respond with Enrichment",
+			"type": "n8n-nodes-base.respondToWebhook",
+			"typeVersion": 1.1,
+			"position": [920, 0]
+		}
+	],
+	"connections": {
+		"SIEM Alert Webhook": {
+			"main": [
+				[
+					{
+						"node": "Look Up Source IP",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Look Up Source IP": {
+			"main": [
+				[
+					{
+						"node": "Has Known CVEs?",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Has Known CVEs?": {
+			"main": [
+				[
+					{
+						"node": "Mark High Priority",
+						"type": "main",
+						"index": 0
+					}
+				],
+				[
+					{
+						"node": "Mark Normal Priority",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Mark High Priority": {
+			"main": [
+				[
+					{
+						"node": "Respond with Enrichment",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Mark Normal Priority": {
+			"main": [
+				[
+					{
+						"node": "Respond with Enrichment",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		}
+	},
+	"pinData": {},
+	"settings": {
+		"executionOrder": "v1"
+	}
+}

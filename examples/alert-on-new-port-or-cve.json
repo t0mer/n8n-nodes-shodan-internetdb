@@ -1,0 +1,73 @@
+{
+	"name": "Shodan InternetDB: alert on new open port or CVE",
+	"nodes": [
+		{
+			"parameters": {
+				"pollTimes": {
+					"item": [
+						{
+							"mode": "everyX",
+							"value": 12,
+							"unit": "hours"
+						}
+					]
+				},
+				"targets": "203.0.113.10, 198.51.100.0/28",
+				"events": ["portOpened", "vulnAdded"],
+				"emitMode": "perChange",
+				"maxAddresses": 256,
+				"options": {}
+			},
+			"id": "c8db30db-96c0-4b7f-80ef-fe46a1b3330e",
+			"name": "Watch My Public IPs",
+			"type": "@t0mer/n8n-nodes-shodan-internetdb.shodanInternetDbTrigger",
+			"typeVersion": 1,
+			"position": [0, 0]
+		},
+		{
+			"parameters": {
+				"resource": "message",
+				"operation": "sendMessage",
+				"chatId": "YOUR_CHAT_ID",
+				"text": "={{ $json.event === 'portOpened' ? `New open port ${$json.value} on ${$json.ip}` : `New CVE ${$json.value} reported for ${$json.ip}` }}\nDetected: {{ $json.detectedAt }}\nPrevious snapshot: {{ $json.previousSeenAt }}",
+				"additionalFields": {
+					"appendAttribution": false
+				}
+			},
+			"id": "66983534-1a7f-40bf-a3a4-da8e29d7219c",
+			"name": "Send Telegram Alert",
+			"type": "n8n-nodes-base.telegram",
+			"typeVersion": 1.2,
+			"position": [260, 0]
+		},
+		{
+			"parameters": {
+				"content": "## New port or CVE alert\nThe trigger polls InternetDB every 12 hours and emits one item per newly opened port or newly reported CVE on your IPs. The first activation only records a baseline and emits nothing.\n\nPrefer WhatsApp? Replace the Telegram node with a WhatsApp node (for example WhatsApp Business Cloud, or an HTTP Request to GreenAPI) and reuse the same message expression.",
+				"height": 220,
+				"width": 420
+			},
+			"id": "e7c4d859-fe75-4f66-854d-fa50f4d14f49",
+			"name": "Note",
+			"type": "n8n-nodes-base.stickyNote",
+			"typeVersion": 1,
+			"position": [-60, -260]
+		}
+	],
+	"connections": {
+		"Watch My Public IPs": {
+			"main": [
+				[
+					{
+						"node": "Send Telegram Alert",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		}
+	},
+	"pinData": {},
+	"settings": {
+		"executionOrder": "v1"
+	}
+}

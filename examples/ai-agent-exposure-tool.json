@@ -1,0 +1,100 @@
+{
+	"name": "Shodan InternetDB: AI agent exposure tool",
+	"nodes": [
+		{
+			"parameters": {
+				"options": {}
+			},
+			"id": "39f25b5c-06ad-4a67-81f9-ab225df457e8",
+			"name": "When Chat Message Received",
+			"type": "@n8n/n8n-nodes-langchain.chatTrigger",
+			"typeVersion": 1.1,
+			"position": [0, 0],
+			"webhookId": "9210ac34-cae3-444f-bcb3-801e0cf72889"
+		},
+		{
+			"parameters": {
+				"options": {
+					"systemMessage": "You are a defensive security assistant. You answer questions like \"what's exposed on this IP?\" about the user's own public IP addresses using the Shodan InternetDB tool.\n\n- Only look up IP addresses. If the user gives a hostname, ask them to resolve it to an IP first.\n- Report open ports (with service names), known CVE IDs, tags such as eol-product or self-signed, and hostnames.\n- If InternetDB has no data (found is false), say so: it is a weekly snapshot, not a live scan.\n- Highlight risky exposures (remote access ports such as 3389, 23, 5900; databases; end-of-life products) and suggest concrete remediation.\n- Do not invent CVE details that the tool did not return.\n- This tool is intended for assets the user owns or is authorized to assess."
+				}
+			},
+			"id": "0cb5b9d0-0898-4667-ad6c-955a0a85b39e",
+			"name": "Exposure Agent",
+			"type": "@n8n/n8n-nodes-langchain.agent",
+			"typeVersion": 1.7,
+			"position": [240, 0]
+		},
+		{
+			"parameters": {
+				"model": {
+					"__rl": true,
+					"mode": "list",
+					"value": "gpt-4o-mini"
+				},
+				"options": {}
+			},
+			"id": "63aa25ac-6e75-4e36-864f-b12b33e70a5f",
+			"name": "OpenAI Chat Model",
+			"type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+			"typeVersion": 1.2,
+			"position": [140, 220]
+		},
+		{
+			"parameters": {
+				"descriptionType": "manual",
+				"toolDescription": "Look up a single public IPv4 or IPv6 address in Shodan InternetDB. Returns open ports with service names, CPEs, hostnames, tags, and known CVE IDs. Input must be an IP address, not a hostname or URL.",
+				"resource": "ip",
+				"operation": "lookup",
+				"ip": "={{ $fromAI('ip', 'The public IPv4 or IPv6 address to look up, for example 203.0.113.10', 'string') }}",
+				"outputMode": "host",
+				"options": {
+					"includePortNames": true
+				}
+			},
+			"id": "2c848737-4d19-4c96-92b5-e9816315c60e",
+			"name": "Shodan InternetDB",
+			"type": "@t0mer/n8n-nodes-shodan-internetdb.shodanInternetDbTool",
+			"typeVersion": 1,
+			"position": [380, 220]
+		}
+	],
+	"connections": {
+		"When Chat Message Received": {
+			"main": [
+				[
+					{
+						"node": "Exposure Agent",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"OpenAI Chat Model": {
+			"ai_languageModel": [
+				[
+					{
+						"node": "Exposure Agent",
+						"type": "ai_languageModel",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Shodan InternetDB": {
+			"ai_tool": [
+				[
+					{
+						"node": "Exposure Agent",
+						"type": "ai_tool",
+						"index": 0
+					}
+				]
+			]
+		}
+	},
+	"pinData": {},
+	"settings": {
+		"executionOrder": "v1"
+	}
+}

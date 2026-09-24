@@ -1,0 +1,157 @@
+{
+	"name": "Shodan InternetDB: weekly exposure report",
+	"nodes": [
+		{
+			"parameters": {
+				"rule": {
+					"interval": [
+						{
+							"field": "weeks",
+							"triggerAtDay": [1],
+							"triggerAtHour": 8
+						}
+					]
+				}
+			},
+			"id": "51bbacb8-b725-4a06-9de1-5857999d1d2b",
+			"name": "Every Monday 08:00",
+			"type": "n8n-nodes-base.scheduleTrigger",
+			"typeVersion": 1.2,
+			"position": [0, 0]
+		},
+		{
+			"parameters": {
+				"resource": "ip",
+				"operation": "lookupMany",
+				"targets": "203.0.113.10, 198.51.100.0/28",
+				"runOnce": true,
+				"outputMode": "host",
+				"options": {
+					"includePortNames": true
+				}
+			},
+			"id": "3b07c10c-07eb-4b39-9f0e-2bf981d431cd",
+			"name": "Look Up My Public IPs",
+			"type": "@t0mer/n8n-nodes-shodan-internetdb.shodanInternetDb",
+			"typeVersion": 1,
+			"position": [220, 0]
+		},
+		{
+			"parameters": {
+				"jsCode": "// Google Sheets cells cannot hold arrays: join them into readable strings.\nreturn $input.all().map(({ json }) => ({\n  json: {\n    ip: json.ip,\n    found: json.found,\n    ports: (json.ports || []).join(', '),\n    services: (json.services || []).map((s) => `${s.port}/${s.name ?? 'unknown'}`).join(', '),\n    vulnCount: json.vulnCount ?? (json.vulns || []).length,\n    vulns: (json.vulns || []).join(', '),\n    tags: (json.tags || []).join(', '),\n    hostnames: (json.hostnames || []).join(', '),\n    hasEolProduct: json.hasEolProduct ?? false,\n    lookedUpAt: json.lookedUpAt ?? new Date().toISOString(),\n  },\n}));"
+			},
+			"id": "9bb78aa7-0ddf-4490-ada5-98f9eb70126b",
+			"name": "Flatten for Sheet",
+			"type": "n8n-nodes-base.code",
+			"typeVersion": 2,
+			"position": [460, -100]
+		},
+		{
+			"parameters": {
+				"operation": "append",
+				"documentId": {
+					"__rl": true,
+					"mode": "id",
+					"value": "YOUR_SPREADSHEET_ID"
+				},
+				"sheetName": {
+					"__rl": true,
+					"mode": "name",
+					"value": "Exposure"
+				},
+				"columns": {
+					"mappingMode": "autoMapInputData",
+					"value": {},
+					"matchingColumns": [],
+					"schema": []
+				},
+				"options": {}
+			},
+			"id": "d930892f-9442-4bb8-916f-0bda5f990326",
+			"name": "Append to Google Sheet",
+			"type": "n8n-nodes-base.googleSheets",
+			"typeVersion": 4.5,
+			"position": [700, -100]
+		},
+		{
+			"parameters": {
+				"jsCode": "// Build one plain-text summary of all looked-up IPs for the email.\nconst hosts = $input.all().map((item) => item.json);\nconst withData = hosts.filter((h) => h.found);\nconst lines = hosts.map((h) => {\n  if (!h.found) return `${h.ip}: no data in InternetDB`;\n  const ports = (h.services || []).map((s) => `${s.port}${s.name ? ` (${s.name})` : ''}`).join(', ') || 'none';\n  const cves = h.vulnCount ?? (h.vulns || []).length;\n  const eol = h.hasEolProduct ? ' [EOL product]' : '';\n  return `${h.ip}: ports ${ports}; ${cves} known CVE(s)${eol}`;\n});\nconst totalCves = withData.reduce((sum, h) => sum + (h.vulnCount ?? 0), 0);\nreturn [{\n  json: {\n    subject: `Weekly exposure report: ${withData.length} of ${hosts.length} IPs exposed, ${totalCves} CVEs`,\n    body: [\n      'Shodan InternetDB weekly exposure report',\n      '',\n      ...lines,\n      '',\n      'InternetDB data refreshes about once a week and is free for non-commercial use.',\n    ].join('\\n'),\n  },\n}];"
+			},
+			"id": "618b0b75-eb5a-4e2a-929d-a7410a115083",
+			"name": "Build Summary",
+			"type": "n8n-nodes-base.code",
+			"typeVersion": 2,
+			"position": [460, 100]
+		},
+		{
+			"parameters": {
+				"fromEmail": "n8n@example.com",
+				"toEmail": "security@example.com",
+				"subject": "={{ $json.subject }}",
+				"emailFormat": "text",
+				"text": "={{ $json.body }}",
+				"options": {}
+			},
+			"id": "103d4fe3-81fb-44f2-b7e1-de2166329fd5",
+			"name": "Send Report Email",
+			"type": "n8n-nodes-base.emailSend",
+			"typeVersion": 2.1,
+			"position": [700, 100]
+		}
+	],
+	"connections": {
+		"Every Monday 08:00": {
+			"main": [
+				[
+					{
+						"node": "Look Up My Public IPs",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Look Up My Public IPs": {
+			"main": [
+				[
+					{
+						"node": "Flatten for Sheet",
+						"type": "main",
+						"index": 0
+					},
+					{
+						"node": "Build Summary",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Flatten for Sheet": {
+			"main": [
+				[
+					{
+						"node": "Append to Google Sheet",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		},
+		"Build Summary": {
+			"main": [
+				[
+					{
+						"node": "Send Report Email",
+						"type": "main",
+						"index": 0
+					}
+				]
+			]
+		}
+	},
+	"pinData": {},
+	"settings": {
+		"executionOrder": "v1"
+	}
+}
