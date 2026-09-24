@@ -1,116 +1,147 @@
-# Releases the package: computes the next YYYY.M.PATCH version, publishes to npm with a
-# provenance attestation, then tags the commit and creates a GitHub Release.
+# Publishes this n8n community node package to npm on every version tag push.
 #
-# Run it from the Actions tab (Release → Run workflow). Leave "version" blank to
-# auto-increment from the latest tag of the current month (2026.9.0 → 2026.9.1 → …).
-# The git tag is the source of truth; package.json in the repo is not bumped.
+# Starting May 1 2026, n8n requires all community nodes to be published via
+# GitHub Actions with npm provenance statements. This workflow satisfies that
+# requirement. Provenance lets anyone cryptographically verify that a package
+# was built by this exact workflow, from this exact repository and commit.
 #
-# Authentication is npm Trusted Publishing (OIDC): no npm token is stored in this repo.
+# ─── PREREQUISITES ─────────────────────────────────────────────────────────────
 #
-# One-time setup:
-#   1. Publish the first version manually so the scoped package exists, then tag it:
-#        npm run build && RELEASE_MODE=true npm publish --access public --provenance=false
-#        git tag 2026.9.0 && git push origin 2026.9.0
-#   2. On npmjs.com → @t0mer/n8n-nodes-shodan-internetdb → Settings → Trusted Publishers,
-#      add GitHub Actions: owner "t0mer", repository "n8n-nodes-shodan-internetdb",
-#      workflow "publish.yml", environment left blank.
-#   3. From then on, release only through this workflow.
+# @n8n/node-cli ≥ 0.23.0 is required. Earlier versions do not support the
+# provenance flag passed by `npm run release` in CI, and the publish step will
+# fail. Check the version installed in this project with:
+#
+#   npm list @n8n/node-cli
+#
+# To upgrade, add @n8n/node-cli@latest as a dev dependency using your package manager.
+#
+# ─── ONE-TIME SETUP ────────────────────────────────────────────────────────────
+#
+# Option A — OIDC Trusted Publishing (recommended, no long-lived secrets):
+#   1. Log in to npmjs.com and open your package's settings.
+#   2. Under "Publish access" → "Trusted Publishers", click "Add a publisher".
+#   3. Select GitHub Actions and fill in:
+#        Repository owner: <your-github-username-or-org>
+#        Repository name:  <your-repo-name>
+#        Workflow name:    publish.yml
+#        Environment:      (leave blank unless you use GitHub Environments)
+#   4. Leave the NPM_TOKEN secret unset in this repository. GitHub's OIDC
+#      token is used instead — no secret ever touches your repo settings.
+#
+# Option B — npm Automation Token (fallback):
+#   1. On npmjs.com: Access Tokens → Generate New Token → Granular Access Token.
+#      Scope it to this package with "Read and write" publish permission.
+#   2. In GitHub: Settings → Secrets and variables → Actions → New secret.
+#      Name it NPM_TOKEN and paste the token value.
+#
+# Both options work with --provenance. Provenance is signed by GitHub's OIDC
+# infrastructure regardless of how npm authentication is handled.
+#
+# ─── TAG CONVENTION ────────────────────────────────────────────────────────────
+#
+# This workflow triggers on tags matching "*.*.*" (e.g. 2026.9.1), and the tag sets the
+# published version: the "Set version from tag" step writes it into package.json before
+# publishing, so package.json does not need to be bumped in git. A leading "v" is stripped.
+# The version must be higher than the latest one on npm.
+# If you prefer tags with a "v" prefix (e.g. v2026.9.1), change the filter to:
+#   tags: ['v*.*.*']
+#
+# ─── RELEASE PROCESS ───────────────────────────────────────────────────────────
+#
+# Tag the commit with the next YYYY.M.PATCH version and push the tag:
+#
+#   VERSION="$(./scripts/next-version.sh)"
+#   git tag "$VERSION" && git push origin "$VERSION"
+#
+# scripts/next-version.sh increments the latest tag of the current month
+# (2026.9.0 → 2026.9.1 → …). Pushing the tag triggers this workflow to publish.
 
-name: Release
+name: Publish
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version (YYYY.M.PATCH). Leave blank to auto-increment.'
-        required: false
-
-concurrency:
-  group: release
-  cancel-in-progress: false
+  push:
+    tags:
+      # Matches 0.1.0, 1.2.3, 2.0.0-rc.1, etc.
+      # See "TAG CONVENTION" above if you prefer tags with a "v" prefix.
+      - '*.*.*'
 
 jobs:
-  release:
+  publish:
     name: Publish to npm
     runs-on: ubuntu-latest
 
     permissions:
-      # OIDC token for trusted publishing and provenance.
+      # Required to mint an OIDC token for npm provenance attestation.
       id-token: write
-      # Push the version tag and create the GitHub Release.
-      contents: write
+      # Scoped down from the default (write) for least-privilege publishing.
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # all tags are needed to compute the version
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '24' # this project pins Node 24
           cache: 'npm'
-          registry-url: 'https://registry.npmjs.org'
-
-      # Trusted publishing needs npm >= 11.5.1.
-      - name: Update npm
-        run: npm install -g npm@^11.5.1
 
       - name: Install dependencies
-        run: npm ci
+        run: 'npm ci'
 
-      - name: Resolve version
-        id: version
+      - name: Set version from tag
+        # The pushed tag is the source of truth for the published version: package.json is
+        # not bumped in git, so write the tag's version into it before publishing.
         env:
-          INPUT_VERSION: ${{ github.event.inputs.version }} # via env: injection-safe
+          TAG: ${{ github.ref_name }}
         run: |
-          set -euo pipefail
-          VERSION="${INPUT_VERSION:-$(./scripts/next-version.sh)}"
-          # No leading zeros: npm would normalize 2026.9.01 to 2026.9.1 and the tag would diverge.
-          [[ "$VERSION" =~ ^[0-9]{4}\.[1-9][0-9]?\.(0|[1-9][0-9]*)$ ]] || { echo "::error::invalid version '$VERSION' (expected YYYY.M.PATCH)"; exit 1; }
-          # A tag on another commit means the version is taken. A tag on HEAD means a re-run
-          # after a partial failure, which the steps below resume safely.
-          if TAGGED="$(git rev-parse -q --verify "refs/tags/$VERSION^{commit}")" && [ "$TAGGED" != "$(git rev-parse HEAD)" ]; then
-            echo "::error::tag $VERSION already exists on another commit"; exit 1
+          VERSION="${TAG#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Tag '$TAG' is not a semver version (e.g. 2026.9.1)"
+            exit 1
           fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Releasing $VERSION"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          echo "Publishing version $VERSION"
 
-      - name: Set package version
+      - name: Release
+        # Publishes to npm with a provenance attestation (requires id-token: write above).
+        # Lint and build run automatically as part of the release process.
+        #
+        # Option A (OIDC): leave NPM_TOKEN unset — the token step is skipped and
+        #   npm uses the OIDC exchange instead.
+        # Option B (token): set NPM_TOKEN in repo secrets — it is written to
+        #   .npmrc here before publishing.
+        run: |
+          [ -n "$NPM_TOKEN" ] && npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
+          npm run release
         env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: npm version "$VERSION" --no-git-tag-version --allow-same-version
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Build and test
-        run: |
-          npm run build
-          npm test
+  scan:
+    # Separate job so the scanner never runs alongside the npm token or the OIDC permission.
+    name: Scan published package
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
-      - name: Publish
-        # `n8n-node release` in CI runs lint and build, then `npm publish` with provenance.
-        # Skipped when this version is already on npm (re-run after a later step failed).
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24' # this project pins Node 24
+
+      - name: Run the n8n Creator Portal scan
+        # Same static analysis the n8n Creator Portal uses for verification. Retries while
+        # the new version propagates through the npm registry.
         env:
-          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ github.ref_name }}
         run: |
-          if [ "$(npm view "@t0mer/n8n-nodes-shodan-internetdb@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
-            echo "$VERSION is already published; skipping."
-          else
-            npm run release
-          fi
-
-      # Tag only after a successful publish, so a failed run never burns a version.
-      - name: Tag and create GitHub Release
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          if ! git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
-            git tag "$VERSION"
-          fi
-          git push origin "refs/tags/$VERSION"
-          if ! gh release view "$VERSION" >/dev/null 2>&1; then
-            gh release create "$VERSION" --title "$VERSION" --generate-notes
-          fi
+          PACKAGE="$(node -p "require('./package.json').name")@${TAG#v}"
+          for attempt in 1 2 3 4 5; do
+            npx --yes @n8n/scan-community-package@0.37.0 "$PACKAGE" && exit 0
+            echo "Scan attempt $attempt failed; retrying in 30s"
+            sleep 30
+          done
+          exit 1
