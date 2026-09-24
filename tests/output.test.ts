@@ -19,8 +19,13 @@ const host: InternetDbHost = {
 	vulns: ['CVE-2021-10000', 'CVE-2017-15906', 'CVE-2021-9999'],
 };
 
-const found: IpOutcome = { kind: 'lookup', result: { status: 'found', host } };
-const notFound: IpOutcome = { kind: 'lookup', result: { status: 'not_found', ip: '9.9.9.9' } };
+const AT = '2026-09-24T00:00:00.000Z';
+const found: IpOutcome = { kind: 'lookup', result: { status: 'found', host }, lookedUpAt: AT };
+const notFound: IpOutcome = {
+	kind: 'lookup',
+	result: { status: 'not_found', ip: '9.9.9.9' },
+	lookedUpAt: AT,
+};
 const nonPublic: IpOutcome = { kind: 'nonPublic', ip: '10.0.0.1' };
 
 const opts = (overrides: Partial<OutputOptions> = {}): OutputOptions => ({
@@ -28,7 +33,6 @@ const opts = (overrides: Partial<OutputOptions> = {}): OutputOptions => ({
 	noDataBehavior: 'returnEmpty',
 	includeSummary: true,
 	includePortNames: false,
-	lookedUpAt: '2026-09-24T00:00:00.000Z',
 	...overrides,
 });
 
@@ -93,7 +97,11 @@ describe('host mode', () => {
 
 	it('adds services when includePortNames is on', () => {
 		const [item] = shapeOutcome(
-			{ kind: 'lookup', result: { status: 'found', host: { ...host, ports: [22, 60000] } } },
+			{
+				kind: 'lookup',
+				result: { status: 'found', host: { ...host, ports: [22, 60000] } },
+				lookedUpAt: AT,
+			},
 			opts({ includePortNames: true }),
 		);
 		expect(item.services).toEqual([
@@ -166,6 +174,7 @@ describe('vulns mode', () => {
 		const clean: IpOutcome = {
 			kind: 'lookup',
 			result: { status: 'found', host: { ...host, vulns: [] } },
+			lookedUpAt: AT,
 		};
 		expect(shapeOutcome(clean, opts({ outputMode: 'vulns' }))).toEqual([]);
 	});

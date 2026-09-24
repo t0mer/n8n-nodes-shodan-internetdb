@@ -9,13 +9,15 @@ export interface OutputOptions {
 	noDataBehavior: NoDataBehavior;
 	includeSummary: boolean;
 	includePortNames: boolean;
-	/** ISO timestamp of the lookup. */
-	lookedUpAt: string;
 }
 
 /** What happened for one IP: a lookup result, or a non-public IP that was never sent. */
 export type IpOutcome =
-	| { kind: 'lookup'; result: LookupResult }
+	| {
+			kind: 'lookup';
+			result: LookupResult;
+			/** ISO timestamp of the request. */ lookedUpAt: string;
+	  }
 	| { kind: 'nonPublic'; ip: string };
 
 export function sortPorts(ports: readonly number[]): number[] {
@@ -42,7 +44,12 @@ export function emptyHost(ip: string): InternetDbHost {
 	return { ip, ports: [], cpes: [], hostnames: [], tags: [], vulns: [] };
 }
 
-function hostItem(host: InternetDbHost, found: boolean, opts: OutputOptions): IDataObject {
+function hostItem(
+	host: InternetDbHost,
+	found: boolean,
+	lookedUpAt: string,
+	opts: OutputOptions,
+): IDataObject {
 	const ports = sortPorts(host.ports);
 	const vulns = sortCves(host.vulns);
 	const item: IDataObject = {
@@ -63,7 +70,7 @@ function hostItem(host: InternetDbHost, found: boolean, opts: OutputOptions): ID
 			vulnCount: vulns.length,
 			hasVulns: vulns.length > 0,
 			hasEolProduct: host.tags.includes('eol-product'),
-			lookedUpAt: opts.lookedUpAt,
+			lookedUpAt,
 			source: SOURCE,
 		});
 	}
@@ -78,7 +85,7 @@ export function shapeOutcome(outcome: IpOutcome, opts: OutputOptions): IDataObje
 			: [];
 	}
 
-	const { result } = outcome;
+	const { result, lookedUpAt } = outcome;
 	if (result.status === 'not_found' && opts.noDataBehavior !== 'returnEmpty') return [];
 
 	const found = result.status === 'found';
@@ -97,7 +104,7 @@ export function shapeOutcome(outcome: IpOutcome, opts: OutputOptions): IDataObje
 			return sortCves(host.vulns).map((cve) => ({ ip: host.ip, cve }));
 		case 'host':
 		default:
-			return [hostItem(host, found, opts)];
+			return [hostItem(host, found, lookedUpAt, opts)];
 	}
 }
 

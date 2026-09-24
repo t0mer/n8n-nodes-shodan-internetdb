@@ -85,10 +85,11 @@ async function lookupTarget(
 		timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
 		maxRetries: options.maxRetries ?? DEFAULT_MAX_RETRIES,
 	});
+	const lookedUpAt = new Date().toISOString();
 	if (result.status === 'not_found' && options.noDataBehavior === 'error') {
 		throw new NodeOperationError(ctx.getNode(), `InternetDB has no data for ${target.ip}`);
 	}
-	return { kind: 'lookup', result };
+	return { kind: 'lookup', result, lookedUpAt };
 }
 
 function shape(outcome: IpOutcome, outputMode: OutputMode, options: LookupNodeOptions) {
@@ -97,7 +98,6 @@ function shape(outcome: IpOutcome, outputMode: OutputMode, options: LookupNodeOp
 		noDataBehavior: options.noDataBehavior ?? 'returnEmpty',
 		includeSummary: options.includeSummary ?? true,
 		includePortNames: options.includePortNames ?? false,
-		lookedUpAt: new Date().toISOString(),
 	});
 }
 
