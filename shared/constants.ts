@@ -1,7 +1,9 @@
+import { PACKAGE_VERSION } from './version';
+
+export { PACKAGE_VERSION };
+
 export const INTERNETDB_BASE_URL = 'https://internetdb.shodan.io';
 
-/** Bump together with `version` in package.json on every release (a test enforces it). */
-export const PACKAGE_VERSION = '2026.9.0';
 export const USER_AGENT = `n8n-nodes-shodan-internetdb/${PACKAGE_VERSION}`;
 
 export const SOURCE = 'shodan-internetdb';
