@@ -1,0 +1,9 @@
+{
+	"detail": [
+		{
+			"loc": ["path", "ip"],
+			"msg": "value is not a valid IPv4 or IPv6 address",
+			"type": "value_error.ipvanyaddress"
+		}
+	]
+}

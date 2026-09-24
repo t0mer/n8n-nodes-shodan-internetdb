@@ -1,0 +1,8 @@
+{
+	"ip": "51.83.59.99",
+	"ports": [22, 80, 443, 500],
+	"cpes": ["cpe:/a:igor_sysoev:nginx", "cpe:/a:openbsd:openssh:7.4"],
+	"hostnames": ["www.sampleresponse.fr"],
+	"tags": ["vpn"],
+	"vulns": ["CVE-2017-15906"]
+}
