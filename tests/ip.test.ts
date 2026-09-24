@@ -57,6 +57,8 @@ describe('parseTarget', () => {
 			kind: 'ipv6',
 			ip: '2606:4700:4700::1111',
 		});
+		expect(parseTarget('fe80::1')).toEqual({ kind: 'ipv6', ip: 'fe80::1' });
+		expect(parseTarget('abcd::1')).toEqual({ kind: 'ipv6', ip: 'abcd::1' });
 		expect(parseTarget('::ffff:1.2.3.4')).toEqual({ kind: 'ipv6', ip: '::ffff:102:304' });
 	});
 
@@ -64,12 +66,19 @@ describe('parseTarget', () => {
 		expect(() => parseTarget('2001:db8::/32')).toThrow(/IPv6 ranges are not supported/);
 	});
 
-	it.each(['example.com', 'www.shodan.io', 'https://example.com/path', 'localhost'])(
-		'rejects hostname/URL %s with the exact message',
-		(s) => {
-			expect(() => parseTarget(s)).toThrow(HOSTNAME_MESSAGE);
-		},
-	);
+	it.each([
+		'example.com',
+		'www.shodan.io',
+		'https://example.com/path',
+		'localhost',
+		'example.com:443',
+		'localhost:8080',
+		'www.example.com/path',
+		'example.com/24',
+		'router:80',
+	])('rejects hostname/URL %s with the exact message', (s) => {
+		expect(() => parseTarget(s)).toThrow(HOSTNAME_MESSAGE);
+	});
 
 	it('has the exact hostname message from the spec', () => {
 		expect(HOSTNAME_MESSAGE).toBe(

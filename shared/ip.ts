@@ -110,11 +110,24 @@ function invalidIPv4(value: string, raw: string): InvalidTargetError {
 	return new InvalidTargetError(`"${raw}" is not a valid IPv4 address.`);
 }
 
+const HOSTNAME = /^[a-z0-9-]+(\.[a-z0-9-]+)*\.?$/i;
+
+/**
+ * True for a hostname, optionally followed by a port or path (`example.com`, `example.com:443`,
+ * `www.example.com/path`). The host part must contain a letter and must not be a bare IPv6
+ * hex group, so `fe80::1` and `2001:db8::/32` are not matched.
+ */
+function looksLikeHostname(s: string): boolean {
+	const host = s.split(/[:/]/)[0];
+	if (!HOSTNAME.test(host) || !/[a-z]/i.test(host)) return false;
+	return host.includes('.') || /[g-z]/i.test(host) || host.length > 4 || !/[:/]/.test(s);
+}
+
 /** Parses one target: an IPv4 address, an IPv4 CIDR range, or a single IPv6 address. */
 export function parseTarget(raw: string): ParsedTarget {
 	const s = raw.trim();
 	if (s === '') throw new InvalidTargetError('Empty target. Pass an IP address or CIDR range.');
-	if (s.includes('://')) throw new InvalidTargetError(HOSTNAME_MESSAGE);
+	if (s.includes('://') || looksLikeHostname(s)) throw new InvalidTargetError(HOSTNAME_MESSAGE);
 
 	const withPort = /^\[([^\]]+)\]:\d+$/.exec(s) ?? /^(\d{1,3}(?:\.\d{1,3}){3}):\d+$/.exec(s);
 	if (withPort) {
@@ -150,7 +163,6 @@ export function parseTarget(raw: string): ParsedTarget {
 		return { kind: 'ipv4', ip: s };
 	}
 
-	if (/^[a-z0-9-]+(\.[a-z0-9-]+)*\.?$/i.test(s)) throw new InvalidTargetError(HOSTNAME_MESSAGE);
 	throw new InvalidTargetError(`"${s}" is not a valid IP address or CIDR range.`);
 }
 
