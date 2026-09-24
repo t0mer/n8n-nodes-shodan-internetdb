@@ -148,8 +148,9 @@ async function executeLookup(ctx: IExecuteFunctions): Promise<INodeExecutionData
 	const returnData: INodeExecutionData[] = [];
 
 	for (let i = 0; i < items.length; i++) {
-		const rawIp = String(ctx.getNodeParameter('ip', i, ''));
+		let rawIp = '';
 		try {
+			rawIp = String(ctx.getNodeParameter('ip', i, ''));
 			const outputMode = ctx.getNodeParameter('outputMode', i, 'host') as OutputMode;
 			const options = ctx.getNodeParameter('options', i, {}) as LookupNodeOptions;
 
@@ -173,8 +174,9 @@ async function executeLookupMany(ctx: IExecuteFunctions): Promise<INodeExecution
 	const returnData: INodeExecutionData[] = [];
 
 	for (let i = 0; i < itemCount; i++) {
-		const rawTargets = String(ctx.getNodeParameter('targets', i, ''));
+		let rawTargets = '';
 		try {
+			rawTargets = String(ctx.getNodeParameter('targets', i, ''));
 			returnData.push(...(await lookupMany(ctx, rawTargets, i)));
 		} catch (error) {
 			if (ctx.continueOnFail()) {

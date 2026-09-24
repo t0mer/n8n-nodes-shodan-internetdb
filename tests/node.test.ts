@@ -273,3 +273,38 @@ describe('Lookup Many', () => {
 		]);
 	});
 });
+
+describe('continue on fail with parameter errors', () => {
+	const throwingParams = (op: string, field: string) => (name: string, i: number) => {
+		if (name === 'operation') return op;
+		if (name === 'runOnce') return false;
+		if (name === field) {
+			if (i === 1) throw new Error('Cannot read properties of undefined');
+			return '51.83.59.99';
+		}
+		if (name === 'options') return { delayMs: 0 };
+		return undefined;
+	};
+
+	it.each([
+		['lookup', 'ip'],
+		['lookupMany', 'targets'],
+	])('%s keeps going when the %s expression fails for one item', async (op, field) => {
+		const ctx = executeContext({
+			items: 3,
+			params: throwingParams(op, field),
+			httpRequest: httpByIp({ '51.83.59.99': [ok(), ok()] }),
+			continueOnFail: true,
+		});
+		const [out] = await node.execute.call(ctx);
+		expect(out.map((item) => [item.pairedItem, item.json.error ?? item.json.found])).toEqual([
+			[{ item: 0 }, true],
+			[{ item: 1 }, 'Cannot read properties of undefined'],
+			[{ item: 2 }, true],
+		]);
+	});
+});
+
+function ok() {
+	return { statusCode: 200, body: host };
+}
