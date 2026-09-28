@@ -16,11 +16,13 @@
     "n8n",
     "shodan",
     "internetdb",
-    "security",
+    "ip-lookup",
+    "open-ports",
+    "cve",
     "osint",
     "attack-surface",
-    "cve",
-    "threat-intelligence"
+    "threat-intelligence",
+    "security"
   ],
   "author": {
     "name": "t0mer",
